@@ -1,0 +1,45 @@
+{
+    "name": "salahapi/salahapi-php",
+    "description": "A PHP library for calculating Islamic prayer times with no external runtime dependencies",
+    "type": "library",
+    "keywords": ["prayer", "salah", "islam", "prayer times", "adhan", "muslim"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "SalahAPI Contributors",
+            "homepage": "https://github.com/salahapi/salahapi-php"
+        }
+    ],
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0|^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "SalahAPI\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SalahAPI\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test-coverage": "phpunit --coverage-html coverage",
+        "test-unit": "phpunit --testsuite unit",
+        "check": [
+            "@test"
+        ]
+    },
+    "scripts-descriptions": {
+        "test": "Run all tests",
+        "test-coverage": "Run tests with coverage report",
+        "test-unit": "Run unit tests only",
+        "check": "Run all checks (tests)"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
