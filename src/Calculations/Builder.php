@@ -18,6 +18,16 @@ use SalahAPI\PrayerCalculationRule;
  */
 class Builder
 {
+    private const DAY_OF_WEEK_MAP = [
+        'Sunday' => 0,
+        'Monday' => 1,
+        'Tuesday' => 2,
+        'Wednesday' => 3,
+        'Thursday' => 4,
+        'Friday' => 5,
+        'Saturday' => 6,
+    ];
+
     private PrayerTimes $prayerTimes;
     private Location $location;
     private CalculationMethod $calculationMethod;
@@ -152,7 +162,8 @@ class Builder
         if ($isWeekly) {
             $csvData = array_merge($csvData, $this->processWeekly($allDaysData, $dtz));
         } else {
-            $csvData = array_merge($csvData, $this->processDaily($allDaysData, $dtz));
+            // For daily frequency, just calculate all days at once
+            $csvData = array_merge($csvData, $this->calculateWeekIqama($allDaysData, $dtz));
         }
         
         return $csvData;
@@ -175,15 +186,14 @@ class Builder
         
         // Determine the day of week when iqama times change
         $changeOnDay = $this->calculationMethod->iqamaCalculationRules?->changeOn ?? 'Friday';
-        $changeOnDayNumber = $this->getDayOfWeekNumber($changeOnDay);
+        $changeOnDayNumber = self::DAY_OF_WEEK_MAP[$changeOnDay] ?? 5;
         
         foreach ($allDaysData as $dayIndex => $dayData) {
             $currentDate = $dayData['date'];
             $currentDayNumber = (int)$currentDate->format('w');
-            $isChangeDay = $currentDayNumber == $changeOnDayNumber;
             
             // Start a new week on the change day
-            if ($isChangeDay || $currentWeekStart === null) {
+            if ($currentDayNumber == $changeOnDayNumber || $currentWeekStart === null) {
                 if ($currentWeekStart !== null && !empty($weekDaysData)) {
                     // Process the previous week
                     $csvRows = array_merge($csvRows, $this->calculateWeekIqama($weekDaysData, $dtz));
@@ -195,12 +205,11 @@ class Builder
             // Add this day to the week
             $weekDaysData[$dayIndex] = $dayData;
             
-            // Check if this is the last day or end of week (day before change day)
-            $dayBeforeChange = ($changeOnDayNumber - 1 + 7) % 7;
-            $isDayBeforeChange = $currentDayNumber == $dayBeforeChange;
+            // Check if this is the last day or end of week
+            $isEndOfWeek = self::isEndOfWeek($currentDayNumber, $changeOnDayNumber);
             $isLastDay = ($processedDays + 1) >= $totalDays;
             
-            if ($isDayBeforeChange || $isLastDay) {
+            if ($isEndOfWeek || $isLastDay) {
                 // Process this week
                 $csvRows = array_merge($csvRows, $this->calculateWeekIqama($weekDaysData, $dtz));
                 $weekDaysData = [];
@@ -216,18 +225,6 @@ class Builder
         }
         
         return $csvRows;
-    }
-
-    /**
-     * Process all days individually (daily frequency)
-     * 
-     * @param array $allDaysData All day data
-     * @param DateTimeZone $dtz Timezone
-     * @return array CSV rows
-     */
-    private function processDaily(array $allDaysData, DateTimeZone $dtz): array
-    {
-        return $this->calculateWeekIqama($allDaysData, $dtz);
     }
 
     /**
@@ -351,23 +348,15 @@ class Builder
     }
 
     /**
-     * Get day of week number from day name
+     * Check if the current day is the end of the week (day before change day)
      * 
-     * @param string $dayName Day name (e.g., 'Monday', 'Friday')
-     * @return int Day number (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+     * @param int $currentDayNumber Current day number (0-6)
+     * @param int $changeOnDayNumber Day number when iqama changes (0-6)
+     * @return bool True if it's the end of the week
      */
-    private function getDayOfWeekNumber(string $dayName): int
+    private static function isEndOfWeek(int $currentDayNumber, int $changeOnDayNumber): bool
     {
-        $days = [
-            'Sunday' => 0,
-            'Monday' => 1,
-            'Tuesday' => 2,
-            'Wednesday' => 3,
-            'Thursday' => 4,
-            'Friday' => 5,
-            'Saturday' => 6,
-        ];
-        
-        return $days[$dayName] ?? 5; // Default to Friday
+        $dayBeforeChange = ($changeOnDayNumber - 1 + 7) % 7;
+        return $currentDayNumber == $dayBeforeChange;
     }
 }
