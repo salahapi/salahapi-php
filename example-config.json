@@ -1,0 +1,62 @@
+{
+    "salahapi": "1.0",
+    "info": {
+        "title": "Example Prayer Times with Iqama",
+        "description": "Sample prayer times configuration with iqama rules",
+        "version": "1.0.0",
+        "contact": {
+            "name": "Example",
+            "email": "example@example.com"
+        }
+    },
+    "location": {
+        "latitude": 47.7716065,
+        "longitude": -122.1942708,
+        "timezone": "America/Los_Angeles",
+        "dateFormat": "YYYY-MM-DD",
+        "timeFormat": "HH:mm",
+        "city": "Seattle",
+        "country": "United States"
+    },
+    "calculationMethod": {
+        "name": "ISNA",
+        "asrCalculationMethod": "Standard",
+        "highLatitudeAdjustment": "MiddleOfTheNight",
+        "iqamaCalculationRules": {
+            "changeOn": "Friday",
+            "fajr": {
+                "change": "weekly",
+                "roundMinutes": "15",
+                "beforeEndMinutes": 30,
+                "earliestTime": "04:30",
+                "latestTime": "06:45"
+            },
+            "dhuhr": {
+                "static": "12:15",
+                "overrides": [
+                    {
+                        "condition": "daylightSavingTime",
+                        "time": {
+                            "static": "13:15"
+                        }
+                    }
+                ]
+            },
+            "asr": {
+                "change": "weekly",
+                "roundMinutes": "15",
+                "afterAthanMinutes": 15
+            },
+            "maghrib": {
+                "change": "daily",
+                "afterAthanMinutes": 10
+            },
+            "isha": {
+                "change": "daily",
+                "afterAthanMinutes": 10,
+                "earliestTime": "19:45",
+                "latestTime": "23:25"
+            }
+        }
+    }
+}

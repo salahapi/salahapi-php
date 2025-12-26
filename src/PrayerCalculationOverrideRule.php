@@ -10,19 +10,9 @@ namespace SalahAPI;
 class PrayerCalculationOverrideRule
 {
     /**
-     * @var string The type of override rule. One of: "daylightSavingsTime", "standardTime", "dateRange".
+     * @var string The type of override rule. One of: "daylightSavingsTime", "ramadan".
      */
     public string $condition;
-
-    /**
-     * @var string|null The start date of the override (required if condition is "dateRange").
-     */
-    public ?string $fromDate = null;
-
-    /**
-     * @var string|null The end date of the override (required if condition is "dateRange").
-     */
-    public ?string $toDate = null;
 
     /**
      * @var PrayerCalculationRule The prayer calculation rule to apply for the override.
@@ -39,14 +29,10 @@ class PrayerCalculationOverrideRule
      */
     public function __construct(
         string $condition,
-        PrayerCalculationRule $time,
-        ?string $fromDate = null,
-        ?string $toDate = null
+        PrayerCalculationRule $time
     ) {
         $this->condition = $condition;
         $this->time = $time;
-        $this->fromDate = $fromDate;
-        $this->toDate = $toDate;
     }
 
     /**
@@ -61,14 +47,6 @@ class PrayerCalculationOverrideRule
             'time' => $this->time->toArray(),
         ];
         
-        if ($this->fromDate !== null) {
-            $data['fromDate'] = $this->fromDate;
-        }
-        
-        if ($this->toDate !== null) {
-            $data['toDate'] = $this->toDate;
-        }
-        
         return $data;
     }
 
@@ -82,9 +60,7 @@ class PrayerCalculationOverrideRule
     {
         return new self(
             $data['condition'],
-            PrayerCalculationRule::fromArray($data['time']),
-            $data['fromDate'] ?? null,
-            $data['toDate'] ?? null
+            PrayerCalculationRule::fromArray($data['time'])
         );
     }
 
