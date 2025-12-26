@@ -47,6 +47,34 @@ class Builder
     }
 
     /**
+     * Normalize high latitude adjustment method from config format to PrayerTimes constant
+     * 
+     * @param string|null $method Method from config
+     * @return string Normalized method constant
+     */
+    private function normalizeHighLatitudeAdjustment(?string $method): string
+    {
+        if ($method === null) {
+            return PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN;
+        }
+        
+        // Map common config values to PrayerTimes constants
+        $mapping = [
+            'MiddleOfTheNight' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
+            'MIDDLE_OF_THE_NIGHT' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
+            'NightMiddle' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
+            'AngleBased' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_ANGLE,
+            'ANGLE_BASED' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_ANGLE,
+            'OneSeventh' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_ONESEVENTH,
+            'ONE_SEVENTH' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_ONESEVENTH,
+            'None' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_NONE,
+            'NONE' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_NONE,
+        ];
+        
+        return $mapping[$method] ?? PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN;
+    }
+
+    /**
      * Build prayer times for a date range
      * 
      * @param DateTime|string $startDate Start date
@@ -91,7 +119,7 @@ class Builder
                 $this->location->latitude,
                 $this->location->longitude,
                 $this->elevation,
-                $this->calculationMethod->highLatitudeAdjustment ?? PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
+                $this->normalizeHighLatitudeAdjustment($this->calculationMethod->highLatitudeAdjustment),
                 null,
                 PrayerTimes::TIME_FORMAT_24H
             );
@@ -217,36 +245,46 @@ class Builder
         
         $iqamaRules = $this->calculationMethod->iqamaCalculationRules;
         
-        // Calculate Iqama times for each prayer using the generic calculateIqama method
+        // Get the reference date for override resolution (first day of the batch)
+        $referenceDate = reset($weekDaysData)['date'];
+        
+        // Resolve effective rules with overrides
+        $effectiveFajrRule = $this->getEffectiveRule($iqamaRules?->fajr, $referenceDate);
+        $effectiveDhuhrRule = $this->getEffectiveRule($iqamaRules?->dhuhr, $referenceDate);
+        $effectiveAsrRule = $this->getEffectiveRule($iqamaRules?->asr, $referenceDate);
+        $effectiveMaghribRule = $this->getEffectiveRule($iqamaRules?->maghrib, $referenceDate);
+        $effectiveIshaRule = $this->getEffectiveRule($iqamaRules?->isha, $referenceDate);
+        
+        // Calculate Iqama times for each prayer using the effective rules
         $fajrIqamaTimes = IqamaCalculator::calculateIqama(
             $weekDaysData,
             'fajr',
-            $iqamaRules?->fajr,
+            $effectiveFajrRule,
             'sunrise'  // End prayer name for beforeEndMinutes calculation
         );
         
         $dhuhrIqamaTimes = IqamaCalculator::calculateIqama(
             $weekDaysData,
             'dhuhr',
-            $iqamaRules?->dhuhr
+            $effectiveDhuhrRule
         );
         
         $asrIqamaTimes = IqamaCalculator::calculateIqama(
             $weekDaysData,
             'asr',
-            $iqamaRules?->asr
+            $effectiveAsrRule
         );
         
         $maghribIqamaTimes = IqamaCalculator::calculateIqama(
             $weekDaysData,
             'maghrib',
-            $iqamaRules?->maghrib
+            $effectiveMaghribRule
         );
         
         $ishaIqamaTimes = IqamaCalculator::calculateIqama(
             $weekDaysData,
             'isha',
-            $iqamaRules?->isha
+            $effectiveIshaRule
         );
         
         // Build CSV rows
@@ -340,5 +378,33 @@ class Builder
         ];
         
         return $days[$dayName] ?? 5; // Default to Friday
+    }
+
+    /**
+     * Get the effective prayer calculation rule for a given date
+     * 
+     * Resolves overrides based on conditions (e.g., daylight savings time)
+     * and returns the appropriate rule to use.
+     * 
+     * @param PrayerCalculationRule|null $baseRule The base rule with potential overrides
+     * @param DateTime $date The date to check for override conditions
+     * @return PrayerCalculationRule|null The effective rule (override or base)
+     */
+    private function getEffectiveRule(?PrayerCalculationRule $baseRule, DateTime $date): ?PrayerCalculationRule
+    {
+        if ($baseRule === null || $baseRule->overrides === null || empty($baseRule->overrides)) {
+            return $baseRule;
+        }
+        
+        $isDst = $date->format('I') == '1';
+        
+        foreach ($baseRule->overrides as $override) {
+            if ($override->condition === 'daylightSavingsTime' && $isDst) {
+                return $override->time;
+            }
+            // Future: Add more conditions as needed (ramadan, dateRange, etc.)
+        }
+        
+        return $baseRule;
     }
 }
