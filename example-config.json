@@ -29,7 +29,16 @@
                 "roundMinutes": "15",
                 "beforeEndMinutes": 30,
                 "earliest": "04:30",
-                "latest": "06:45"
+                "latest": "06:45",
+                "overrides": [
+                    {
+                        "condition": "ramadan",
+                        "time": {
+                            "change": "daily",
+                            "afterAthanMinutes": 10
+                        }
+                    }
+                ]
             },
             "dhuhr": {
                 "static": "12:30",
@@ -55,7 +64,16 @@
                 "change": "daily",
                 "afterAthanMinutes": 10,
                 "earliest": "19:45",
-                "latest": "23:25"
+                "latest": "23:25",
+                "overrides": [
+                    {
+                        "condition": "ramadan",
+                        "time": {
+                            "change": "daily",
+                            "afterAthanMinutes": 10
+                        }
+                    }
+                ]
             }
         }
     }
