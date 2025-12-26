@@ -28,16 +28,16 @@
                 "change": "weekly",
                 "roundMinutes": "15",
                 "beforeEndMinutes": 30,
-                "earliestTime": "04:30",
-                "latestTime": "06:45"
+                "earliest": "04:30",
+                "latest": "06:45"
             },
             "dhuhr": {
-                "static": "12:15",
+                "static": "12:30",
                 "overrides": [
                     {
-                        "condition": "daylightSavingTime",
+                        "condition": "daylightSavingsTime",
                         "time": {
-                            "static": "13:15"
+                            "static": "13:30"
                         }
                     }
                 ]
@@ -54,8 +54,8 @@
             "isha": {
                 "change": "daily",
                 "afterAthanMinutes": 10,
-                "earliestTime": "19:45",
-                "latestTime": "23:25"
+                "earliest": "19:45",
+                "latest": "23:25"
             }
         }
     }

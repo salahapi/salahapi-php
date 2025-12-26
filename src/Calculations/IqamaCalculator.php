@@ -32,11 +32,13 @@ class IqamaCalculator
         
         $results = [];
         
-        // If static time is specified, use it for all days
+        // If static time is specified, evaluate overrides per-day
         if ($rule->static !== null) {
             foreach ($daysData as $dayIndex => $dayData) {
                 $dayDate = $dayData['date'];
-                $staticTime = TimeHelpers::parseTimeString($dayDate, $rule->static);
+                // Resolve effective rule for this specific day (handles DST overrides per-day)
+                $effectiveRule = self::getEffectiveRule($rule, $dayDate);
+                $staticTime = TimeHelpers::parseTimeString($dayDate, $effectiveRule->static);
                 $results[$dayIndex] = $staticTime;
             }
             return $results;
@@ -151,6 +153,34 @@ class IqamaCalculator
         }
         
         return $results;
+    }
+
+    /**
+     * Get the effective rule by resolving overrides
+     * 
+     * Resolves overrides based on conditions (e.g., daylight savings time)
+     * and returns the appropriate rule to use.
+     * 
+     * @param PrayerCalculationRule|null $baseRule The base rule with potential overrides
+     * @param DateTime $date The date to check for override conditions
+     * @return PrayerCalculationRule|null The effective rule (override or base)
+     */
+    private static function getEffectiveRule(?PrayerCalculationRule $baseRule, DateTime $date): ?PrayerCalculationRule
+    {
+        if ($baseRule === null || $baseRule->overrides === null || empty($baseRule->overrides)) {
+            return $baseRule;
+        }
+        
+        $isDst = $date->format('I') == '1';
+        
+        foreach ($baseRule->overrides as $override) {
+            if ($override->condition === 'daylightSavingsTime' && $isDst) {
+                return $override->time;
+            }
+            // Future: Add more conditions as needed (ramadan, dateRange, etc.)
+        }
+        
+        return $baseRule;
     }
 }
 

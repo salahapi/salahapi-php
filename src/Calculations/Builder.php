@@ -245,46 +245,37 @@ class Builder
         
         $iqamaRules = $this->calculationMethod->iqamaCalculationRules;
         
-        // Get the reference date for override resolution (first day of the batch)
-        $referenceDate = reset($weekDaysData)['date'];
-        
-        // Resolve effective rules with overrides
-        $effectiveFajrRule = $this->getEffectiveRule($iqamaRules?->fajr, $referenceDate);
-        $effectiveDhuhrRule = $this->getEffectiveRule($iqamaRules?->dhuhr, $referenceDate);
-        $effectiveAsrRule = $this->getEffectiveRule($iqamaRules?->asr, $referenceDate);
-        $effectiveMaghribRule = $this->getEffectiveRule($iqamaRules?->maghrib, $referenceDate);
-        $effectiveIshaRule = $this->getEffectiveRule($iqamaRules?->isha, $referenceDate);
-        
-        // Calculate Iqama times for each prayer using the effective rules
+        // Calculate Iqama times for each prayer, passing base rules with overrides
+        // IqamaCalculator will resolve overrides per-day for static times
         $fajrIqamaTimes = IqamaCalculator::calculateIqama(
             $weekDaysData,
             'fajr',
-            $effectiveFajrRule,
+            $iqamaRules?->fajr,
             'sunrise'  // End prayer name for beforeEndMinutes calculation
         );
         
         $dhuhrIqamaTimes = IqamaCalculator::calculateIqama(
             $weekDaysData,
             'dhuhr',
-            $effectiveDhuhrRule
+            $iqamaRules?->dhuhr
         );
         
         $asrIqamaTimes = IqamaCalculator::calculateIqama(
             $weekDaysData,
             'asr',
-            $effectiveAsrRule
+            $iqamaRules?->asr
         );
         
         $maghribIqamaTimes = IqamaCalculator::calculateIqama(
             $weekDaysData,
             'maghrib',
-            $effectiveMaghribRule
+            $iqamaRules?->maghrib
         );
         
         $ishaIqamaTimes = IqamaCalculator::calculateIqama(
             $weekDaysData,
             'isha',
-            $effectiveIshaRule
+            $iqamaRules?->isha
         );
         
         // Build CSV rows
@@ -378,33 +369,5 @@ class Builder
         ];
         
         return $days[$dayName] ?? 5; // Default to Friday
-    }
-
-    /**
-     * Get the effective prayer calculation rule for a given date
-     * 
-     * Resolves overrides based on conditions (e.g., daylight savings time)
-     * and returns the appropriate rule to use.
-     * 
-     * @param PrayerCalculationRule|null $baseRule The base rule with potential overrides
-     * @param DateTime $date The date to check for override conditions
-     * @return PrayerCalculationRule|null The effective rule (override or base)
-     */
-    private function getEffectiveRule(?PrayerCalculationRule $baseRule, DateTime $date): ?PrayerCalculationRule
-    {
-        if ($baseRule === null || $baseRule->overrides === null || empty($baseRule->overrides)) {
-            return $baseRule;
-        }
-        
-        $isDst = $date->format('I') == '1';
-        
-        foreach ($baseRule->overrides as $override) {
-            if ($override->condition === 'daylightSavingsTime' && $isDst) {
-                return $override->time;
-            }
-            // Future: Add more conditions as needed (ramadan, dateRange, etc.)
-        }
-        
-        return $baseRule;
     }
 }
