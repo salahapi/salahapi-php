@@ -415,4 +415,146 @@ class BuilderTest extends TestCase
         $this->assertEquals('2023-01-01', $result[1][0]);
         $this->assertEquals('2023-01-31', $result[31][0]);
     }
+
+    /**
+     * Test Fajr iqama (30 min before sunrise, rounded to 15 min, weekly) for Seattle March–May.
+     * All generated days must have Fajr iqama at least 30 minutes before sunrise.
+     */
+    public function testSeattleFajrIqama30MinBeforeSunriseWeeklyMarchToMay()
+    {
+        $location = new Location(
+            47.6062,                // latitude (Seattle)
+            -122.3321,              // longitude (Seattle)
+            'America/Los_Angeles',  // timezone
+            'Y-m-d',               // dateFormat
+            'H:i'                  // timeFormat
+        );
+
+        $fajrRule = new PrayerCalculationRule(
+            null,       // static
+            'weekly',   // change
+            15,         // roundMinutes
+            null,       // earliest
+            null,       // latest
+            null,       // afterAthanMinutes
+            30          // beforeEndMinutes (30 min before sunrise)
+        );
+
+        $iqamaRules = new IqamaCalculationRules(
+            'Friday',   // changeOn (recalculate every Friday)
+            $fajrRule   // fajr
+        );
+
+        $calculationMethod = new CalculationMethod(
+            'ISNA',
+            15.0,
+            15.0,
+            'Standard',
+            'MiddleOfTheNight',
+            $iqamaRules
+        );
+
+        $builder = new Builder($location, $calculationMethod);
+        $csvData = $builder->build('2026-03-01', '2026-05-31');
+
+        // Skip header row
+        $dataRows = array_slice($csvData, 1);
+        $this->assertNotEmpty($dataRows, 'Should have prayer time rows for March–May');
+
+        $tz = new DateTimeZone('America/Los_Angeles');
+
+        foreach ($dataRows as $row) {
+            $date = $row[0];
+            $fajrIqama = $row[2];
+            $sunrise = $row[3];
+
+            if (empty($fajrIqama)) {
+                continue;
+            }
+
+            $iqamaTime  = DateTime::createFromFormat('Y-m-d H:i', "$date $fajrIqama", $tz);
+            $sunriseTime = DateTime::createFromFormat('Y-m-d H:i', "$date $sunrise", $tz);
+
+            $diffMinutes = ($sunriseTime->getTimestamp() - $iqamaTime->getTimestamp()) / 60;
+
+            $this->assertGreaterThanOrEqual(
+                30,
+                $diffMinutes,
+                "On $date, Fajr iqama ($fajrIqama) is less than 30 min before sunrise ($sunrise)"
+            );
+        }
+    }
+
+    /**
+     * Test Isha iqama (30 min after athan, rounded to 15 min, weekly) for Seattle March–May.
+     * All generated days must have Isha iqama at least 30 minutes after athan.
+     */
+    public function testSeattleIshaIqama30MinAfterAthanWeeklyMarchToMay()
+    {
+        $location = new Location(
+            47.6062,                // latitude (Seattle)
+            -122.3321,              // longitude (Seattle)
+            'America/Los_Angeles',  // timezone
+            'Y-m-d',               // dateFormat
+            'H:i'                  // timeFormat
+        );
+
+        $ishaRule = new PrayerCalculationRule(
+            null,       // static
+            'weekly',   // change
+            15,         // roundMinutes
+            null,       // earliest
+            null,       // latest
+            30,         // afterAthanMinutes (30 min after athan)
+            null        // beforeEndMinutes
+        );
+
+        $iqamaRules = new IqamaCalculationRules(
+            'Friday',   // changeOn
+            null,       // fajr
+            null,       // dhuhr
+            null,       // asr
+            null,       // maghrib
+            $ishaRule   // isha
+        );
+
+        $calculationMethod = new CalculationMethod(
+            'ISNA',
+            15.0,
+            15.0,
+            'Standard',
+            'MiddleOfTheNight',
+            $iqamaRules
+        );
+
+        $builder = new Builder($location, $calculationMethod);
+        $csvData = $builder->build('2026-03-01', '2026-05-31');
+
+        // Skip header row
+        $dataRows = array_slice($csvData, 1);
+        $this->assertNotEmpty($dataRows, 'Should have prayer time rows for March–May');
+
+        $tz = new DateTimeZone('America/Los_Angeles');
+
+        foreach ($dataRows as $row) {
+            $date = $row[0];
+            $ishaAthan = $row[10];
+            $ishaIqama = $row[11];
+
+            if (empty($ishaIqama)) {
+                continue;
+            }
+
+            $athanTime = DateTime::createFromFormat('Y-m-d H:i', "$date $ishaAthan", $tz);
+            $iqamaTime = DateTime::createFromFormat('Y-m-d H:i', "$date $ishaIqama", $tz);
+
+            $diffMinutes = ($iqamaTime->getTimestamp() - $athanTime->getTimestamp()) / 60;
+
+            $this->assertGreaterThanOrEqual(
+                30,
+                $diffMinutes,
+                "On $date, Isha iqama ($ishaIqama) is less than 30 min after athan ($ishaAthan)"
+            );
+        }
+    }
 }

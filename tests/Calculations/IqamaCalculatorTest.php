@@ -271,11 +271,12 @@ class IqamaCalculatorTest extends TestCase
 
         $results = IqamaCalculator::calculateIqama($days_data, 'fajr', $rule, 'sunrise');
         
-        // Weekly calculation across DST boundary has complex behavior
-        // The actual results show each DST day getting consistent treatment
-        $this->assertEquals('05:50:00', $results[0]->format('H:i:s'));  // March 11 (no DST)
-        $this->assertEquals('06:50:00', $results[1]->format('H:i:s'));  // March 12 (DST)
-        $this->assertEquals('06:50:00', $results[2]->format('H:i:s'));  // March 13 (DST)
+        // Weekly calculation across DST boundary: same wall clock iqama for all days,
+        // based on the latest candidate to guarantee afterAthanMinutes for all days.
+        // Latest athan is 06:32, roundUp(5)=06:35, +20=06:55 → all days get 06:55.
+        $this->assertEquals('06:55:00', $results[0]->format('H:i:s'));  // March 11 (no DST)
+        $this->assertEquals('06:55:00', $results[1]->format('H:i:s'));  // March 12 (DST)
+        $this->assertEquals('06:55:00', $results[2]->format('H:i:s'));  // March 13 (DST)
     }
 
     /**
