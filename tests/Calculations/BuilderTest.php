@@ -557,4 +557,65 @@ class BuilderTest extends TestCase
             );
         }
     }
+
+    /**
+     * Test that the default build does not include the optional Asr method columns
+     */
+    public function testBuildWithoutAsrMethods()
+    {
+        $location = $this->createTestLocation();
+        $calculationMethod = $this->createTestCalculationMethodDaily();
+
+        $builder = new Builder($location, $calculationMethod);
+
+        $result = $builder->build('2023-01-15', '2023-01-15');
+
+        // Header should not contain the optional columns
+        $this->assertNotContains('asr_athan_standard', $result[0]);
+        $this->assertNotContains('asr_athan_hanafi', $result[0]);
+        $this->assertCount(12, $result[0]);
+    }
+
+    /**
+     * Test that enabling Asr methods adds the Standard and Hanafi columns (SalahAPI 1.1)
+     */
+    public function testBuildWithAsrMethods()
+    {
+        $location = $this->createTestLocation();
+        $calculationMethod = $this->createTestCalculationMethodDaily();
+
+        $builder = new Builder($location, $calculationMethod, 0, true);
+
+        $result = $builder->build('2023-01-15', '2023-01-15');
+
+        // Header should include the two optional columns at the end
+        $header = $result[0];
+        $this->assertCount(14, $header);
+        $this->assertEquals('asr_athan_standard', $header[12]);
+        $this->assertEquals('asr_athan_hanafi', $header[13]);
+
+        // Data row should contain valid times in those columns
+        $dataRow = $result[1];
+        $this->assertMatchesRegularExpression('/^\d{2}:\d{2}$/', $dataRow[12]);
+        $this->assertMatchesRegularExpression('/^\d{2}:\d{2}$/', $dataRow[13]);
+
+        // Hanafi Asr is always at or after Standard Asr on the same day
+        $this->assertGreaterThanOrEqual($dataRow[12], $dataRow[13]);
+    }
+
+    /**
+     * Test that buildAssociative exposes the optional Asr method keys when enabled
+     */
+    public function testBuildAssociativeWithAsrMethods()
+    {
+        $location = $this->createTestLocation();
+        $calculationMethod = $this->createTestCalculationMethodDaily();
+
+        $builder = new Builder($location, $calculationMethod, 0, true);
+
+        $result = $builder->buildAssociative('2023-01-15', '2023-01-15');
+
+        $this->assertArrayHasKey('asr_athan_standard', $result[0]);
+        $this->assertArrayHasKey('asr_athan_hanafi', $result[0]);
+    }
 }

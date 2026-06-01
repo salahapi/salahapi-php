@@ -11,7 +11,7 @@ Perfect for WordPress plugins, standalone applications, or any PHP project that 
 
 ## Features
 
-- 📋 **SalahAPI Document Contract** - Define prayer times data following the SalahAPI specification v1.0
+- 📋 **SalahAPI Document Contract** - Define prayer times data following the SalahAPI specification v1.1
 - 🏗️ **Prayer Times Builder** - Generate accurate prayer times for any location and date range
 - 🕌 Support for multiple calculation methods (MWL, ISNA, Egypt, Umm al-Qura, etc.)
 - 🔧 Flexible Iqama calculation with daily/weekly frequency support
@@ -218,6 +218,38 @@ $times = $builder->buildAssociative('2025-01-01', '2025-01-31');
 foreach ($times as $day) {
     echo "{$day['day']}: Fajr {$day['fajr_athan']}, Dhuhr {$day['dhuhr_athan']}\n";
 }
+```
+
+#### Exporting Asr Athan in Both Standard and Hanafi Formats (SalahAPI 1.1)
+
+SalahAPI 1.1 adds two optional CSV columns, `asr_athan_standard` and
+`asr_athan_hanafi`, allowing the Asr athan to be exported in both schools of
+thought regardless of the configured `asrCalculationMethod`. Enable them by
+passing `true` as the fourth `Builder` constructor argument:
+
+```php
+use SalahAPI\Calculations\Builder;
+
+// The fourth argument enables the optional Asr method columns
+$builder = new Builder($location, $calculationMethod, 0, includeAsrMethods: true);
+
+$times = $builder->buildAssociative('2025-01-01', '2025-01-31');
+print_r($times[0]);
+// Array
+// (
+//     ...
+//     [asr_athan] => 14:30
+//     [asr_iqama] =>
+//     ...
+//     [asr_athan_standard] => 14:30
+//     [asr_athan_hanafi] => 15:12
+// )
+```
+
+From the command line, pass the `--asr-methods` flag to the calculate script:
+
+```bash
+./scripts/calculate.sh --asr-methods 2025-01-01 2025-01-31 config.json
 ```
 
 #### Adding Iqama Times with Daily Frequency
