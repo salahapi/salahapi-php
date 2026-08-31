@@ -21,6 +21,7 @@
     "calculationMethod": {
         "name": "ISNA",
         "asrCalculationMethod": "Standard",
+        "asrIqamaCalculationMethod": "Hanafi",
         "highLatitudeAdjustment": "MiddleOfTheNight",
         "iqamaCalculationRules": {
             "changeOn": "Friday",

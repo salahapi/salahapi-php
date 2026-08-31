@@ -21,35 +21,22 @@ NC='\033[0m' # No Color
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 [--asr-methods] <start-date> <end-date> <json-file>"
+    echo "Usage: $0 <start-date> <end-date> <json-file>"
     echo ""
     echo "Arguments:"
     echo "  start-date   Start date in YYYY-MM-DD format"
     echo "  end-date     End date in YYYY-MM-DD format"
     echo "  json-file    Path to JSON file containing SalahAPI configuration"
     echo ""
-    echo "Options:"
-    echo "  --asr-methods  Include the optional 'asr_athan_standard' and"
-    echo "                 'asr_athan_hanafi' columns (SalahAPI 1.1)."
-    echo ""
     echo "Example:"
     echo "  $0 2024-01-01 2024-01-31 config.json"
-    echo "  $0 --asr-methods 2024-01-01 2024-01-31 config.json"
     exit 1
 }
 
-# Parse optional flags and collect positional arguments
-INCLUDE_ASR_METHODS=0
+# Collect positional arguments
 POSITIONAL=()
 for arg in "$@"; do
-    case "$arg" in
-        --asr-methods)
-            INCLUDE_ASR_METHODS=1
-            ;;
-        *)
-            POSITIONAL+=("$arg")
-            ;;
-    esac
+    POSITIONAL+=("$arg")
 done
 set -- "${POSITIONAL[@]}"
 
@@ -106,7 +93,6 @@ if ($argc < 4) {
 $startDate = $argv[1];
 $endDate = $argv[2];
 $jsonFile = $argv[3];
-$includeAsrMethods = isset($argv[4]) && $argv[4] === '1';
 
 // Read and parse JSON file
 $jsonContent = @file_get_contents($jsonFile);
@@ -138,8 +124,7 @@ try {
     $builder = new Builder(
         $salahApi->location,
         $salahApi->calculationMethod,
-        $salahApi->location->elevation ?? 0,
-        $includeAsrMethods
+        $salahApi->location->elevation ?? 0
     );
     
     // Calculate prayer times and output CSV
@@ -161,7 +146,7 @@ sed -i.bak "s|__DIR__ . '/..|'$PROJECT_DIR|g" "$TEMP_PHP"
 rm -f "$TEMP_PHP.bak"
 
 # Run the PHP script and capture output
-php "$TEMP_PHP" "$START_DATE" "$END_DATE" "$JSON_FILE" "$INCLUDE_ASR_METHODS"
+php "$TEMP_PHP" "$START_DATE" "$END_DATE" "$JSON_FILE"
 EXIT_CODE=$?
 
 # Clean up temporary file

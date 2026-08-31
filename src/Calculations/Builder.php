@@ -31,13 +31,13 @@ class Builder
     private Location $location;
     private CalculationMethod $calculationMethod;
     private int $elevation;
-    private bool $includeAsrMethods;
 
-    /** Asr school driving every prayer time, including the Asr used for iqama. */
-    private string $iqamaAsrSchool;
-
-    /** Asr school used for the `asr_athan` output column only. */
+    /** Asr school used for the `asr_athan` output column (asrCalculationMethod). */
     private string $athanAsrSchool;
+
+    /** Asr school whose athan time drives the Asr iqama calculation
+     *  (asrIqamaCalculationMethod, falling back to asrCalculationMethod). */
+    private string $iqamaAsrSchool;
 
     /** @var array<string, PrayerTimes> Lazily created calculators keyed by Asr school. */
     private array $calculators = [];
@@ -48,26 +48,18 @@ class Builder
      * @param Location $location Location configuration
      * @param CalculationMethod $calculationMethod Calculation method configuration
      * @param int $elevation Elevation in meters (default: 0)
-     * @param bool $includeAsrMethods When true, the generated CSV includes the optional
-     *                                `asr_athan_standard` and `asr_athan_hanafi` columns
-     *                                (SalahAPI 1.1 feature).
-     * @param string|null $asrAthanMethod Asr method used for the `asr_athan` output column.
-     *                                    Defaults to the calculation method used for iqama.
      */
     public function __construct(
         Location $location,
         CalculationMethod $calculationMethod,
-        int $elevation = 0,
-        bool $includeAsrMethods = false,
-        ?string $asrAthanMethod = null
+        int $elevation = 0
     ) {
         $this->location = $location;
         $this->calculationMethod = $calculationMethod;
         $this->elevation = $elevation;
-        $this->includeAsrMethods = $includeAsrMethods;
-        $this->iqamaAsrSchool = $this->normalizeAsrSchool($calculationMethod->asrCalculationMethod);
-        $this->athanAsrSchool = $this->normalizeAsrSchool(
-            $asrAthanMethod ?? $calculationMethod->asrCalculationMethod
+        $this->athanAsrSchool = $this->normalizeAsrSchool($calculationMethod->asrCalculationMethod);
+        $this->iqamaAsrSchool = $this->normalizeAsrSchool(
+            $calculationMethod->asrIqamaCalculationMethod ?? $calculationMethod->asrCalculationMethod
         );
     }
 
@@ -198,26 +190,26 @@ class Builder
             };
 
             // Memoized so each school is only calculated once per day.
-            $asrBySchool = [$this->iqamaAsrSchool => $times[PrayerTimes::ASR]];
+            $asrBySchool = [];
             $asrFor = function (string $asrSchool) use (&$asrBySchool, $currentDate): string {
                 return $asrBySchool[$asrSchool] ??=
                     $this->calculateTimes($currentDate, $asrSchool)[PrayerTimes::ASR];
             };
 
+            // Both standard and hanafi Asr athan times are always provided.
+            // The `asr` entry holds the athan time of the Asr iqama school and is
+            // what IqamaCalculator's afterAthanMinutes logic is based on.
             $athan = [
                 'fajr' => $toDateTime($times[PrayerTimes::FAJR]),
                 'sunrise' => $toDateTime($times[PrayerTimes::SUNRISE]),
                 'dhuhr' => $toDateTime($times[PrayerTimes::ZHUHR]),
-                'asr' => $toDateTime($times[PrayerTimes::ASR]),
+                'asr' => $toDateTime($asrFor($this->iqamaAsrSchool)),
                 'asr_athan' => $toDateTime($asrFor($this->athanAsrSchool)),
+                'asr_standard' => $toDateTime($asrFor(PrayerTimes::SCHOOL_STANDARD)),
+                'asr_hanafi' => $toDateTime($asrFor(PrayerTimes::SCHOOL_HANAFI)),
                 'maghrib' => $toDateTime($times[PrayerTimes::MAGHRIB]),
                 'isha' => $toDateTime($times[PrayerTimes::ISHA]),
             ];
-
-            if ($this->includeAsrMethods) {
-                $athan['asr_standard'] = $toDateTime($asrFor(PrayerTimes::SCHOOL_STANDARD));
-                $athan['asr_hanafi'] = $toDateTime($asrFor(PrayerTimes::SCHOOL_HANAFI));
-            }
 
             $allDaysData[$i] = [
                 'date' => clone $currentDate,
@@ -234,10 +226,6 @@ class Builder
             'dhuhr_athan', 'dhuhr_iqama', 'asr_athan', 'asr_iqama',
             'maghrib_athan', 'maghrib_iqama', 'isha_athan', 'isha_iqama'
         ];
-        if ($this->includeAsrMethods) {
-            $header[] = 'asr_athan_standard';
-            $header[] = 'asr_athan_hanafi';
-        }
         $csvData[] = $header;
         
         if ($isWeekly) {
@@ -377,11 +365,6 @@ class Builder
                 $athan['isha']->format('H:i'),
                 isset($ishaIqamaTimes[$dayIndex]) ? $ishaIqamaTimes[$dayIndex]->format('H:i') : '',
             ];
-
-            if ($this->includeAsrMethods) {
-                $row[] = isset($athan['asr_standard']) ? $athan['asr_standard']->format('H:i') : '';
-                $row[] = isset($athan['asr_hanafi']) ? $athan['asr_hanafi']->format('H:i') : '';
-            }
 
             $csvRows[] = $row;
         }

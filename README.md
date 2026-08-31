@@ -220,37 +220,32 @@ foreach ($times as $day) {
 }
 ```
 
-#### Exporting Asr Athan in Both Standard and Hanafi Formats (SalahAPI 1.1)
+#### Separate Asr Iqama Calculation Method (SalahAPI 1.1)
 
-SalahAPI 1.1 adds two optional CSV columns, `asr_athan_standard` and
-`asr_athan_hanafi`, allowing the Asr athan to be exported in both schools of
-thought regardless of the configured `asrCalculationMethod`. Enable them by
-passing `true` as the fourth `Builder` constructor argument:
+SalahAPI 1.1 adds an optional `asrIqamaCalculationMethod` field to the
+CalculationMethod object, allowing the Asr Iqama to be calculated using a
+different school of thought than the Asr Athan. When omitted,
+`asrCalculationMethod` is used for both the Asr Athan and Iqama times:
 
 ```php
-use SalahAPI\Calculations\Builder;
+use SalahAPI\CalculationMethod;
 
-// The fourth argument enables the optional Asr method columns
-$builder = new Builder($location, $calculationMethod, 0, includeAsrMethods: true);
-
-$times = $builder->buildAssociative('2025-01-01', '2025-01-31');
-print_r($times[0]);
-// Array
-// (
-//     ...
-//     [asr_athan] => 14:30
-//     [asr_iqama] =>
-//     ...
-//     [asr_athan_standard] => 14:30
-//     [asr_athan_hanafi] => 15:12
-// )
+// Asr Athan is calculated using the standard method, but the
+// Asr Iqama is derived from the hanafi Asr Athan time
+$calculationMethod = new CalculationMethod(
+    name: 'MuslimWorldLeague',
+    fajrAngle: 18.0,
+    ishaAngle: 17.0,
+    asrCalculationMethod: 'standard',
+    asrIqamaCalculationMethod: 'hanafi'
+);
 ```
 
-From the command line, pass the `--asr-methods` flag to the calculate script:
-
-```bash
-./scripts/calculate.sh --asr-methods 2025-01-01 2025-01-31 config.json
-```
+When an Asr iqama rule uses `afterAthanMinutes`, the delay is applied to the
+athan time of the school specified by `asrIqamaCalculationMethod` (or
+`asrCalculationMethod` when omitted). Both the standard and hanafi Asr athan
+times are always calculated internally, so no additional configuration is
+needed to support both schools of thought.
 
 #### Adding Iqama Times with Daily Frequency
 
@@ -500,7 +495,9 @@ $method = new CalculationMethod(
     float $ishaAngle,                  // Isha angle
     ?string $asrCalculationMethod = null,  // 'Standard' or 'Hanafi'
     ?string $highLatitudeAdjustment = null,  // Adjustment method
-    ?IqamaCalculationRules $iqamaCalculationRules = null
+    ?IqamaCalculationRules $iqamaCalculationRules = null,
+    ?array $jumuahRules = null,
+    ?string $asrIqamaCalculationMethod = null  // 'Standard' or 'Hanafi'; defaults to asrCalculationMethod
 );
 
 // Methods

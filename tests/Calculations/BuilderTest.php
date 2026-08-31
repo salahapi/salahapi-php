@@ -4,6 +4,7 @@ namespace SalahAPI\Tests\Calculations;
 
 use PHPUnit\Framework\TestCase;
 use SalahAPI\Calculations\Builder;
+use SalahAPI\Calculations\PrayerTimes;
 use SalahAPI\Location;
 use SalahAPI\CalculationMethod;
 use SalahAPI\IqamaCalculationRules;
@@ -559,9 +560,10 @@ class BuilderTest extends TestCase
     }
 
     /**
-     * Test that the default build does not include the optional Asr method columns
+     * Test that the generated CSV never includes the removed optional
+     * `asr_athan_standard` and `asr_athan_hanafi` columns (removed in 1.1)
      */
-    public function testBuildWithoutAsrMethods()
+    public function testBuildWithoutAsrMethodColumns()
     {
         $location = $this->createTestLocation();
         $calculationMethod = $this->createTestCalculationMethodDaily();
@@ -570,52 +572,171 @@ class BuilderTest extends TestCase
 
         $result = $builder->build('2023-01-15', '2023-01-15');
 
-        // Header should not contain the optional columns
+        // Header should not contain the removed columns
         $this->assertNotContains('asr_athan_standard', $result[0]);
         $this->assertNotContains('asr_athan_hanafi', $result[0]);
         $this->assertCount(12, $result[0]);
     }
 
     /**
-     * Test that enabling Asr methods adds the Standard and Hanafi columns (SalahAPI 1.1)
+     * Test that Asr iqama defaults to the asrCalculationMethod athan time
+     * when asrIqamaCalculationMethod is omitted
      */
-    public function testBuildWithAsrMethods()
+    public function testAsrIqamaDefaultsToAsrCalculationMethod()
     {
         $location = $this->createTestLocation();
-        $calculationMethod = $this->createTestCalculationMethodDaily();
 
-        $builder = new Builder($location, $calculationMethod, 0, true);
+        $iqamaRules = new IqamaCalculationRules(
+            null,  // changeOn
+            null,  // fajr
+            null,  // dhuhr
+            new PrayerCalculationRule(null, 'daily', 1, null, null, 10, null, null),  // asr: +10 min after athan
+            null,  // maghrib
+            null   // isha
+        );
 
-        $result = $builder->build('2023-01-15', '2023-01-15');
+        $calculationMethod = new CalculationMethod(
+            'MWL',
+            18.0,
+            17.0,
+            'Standard',  // asrCalculationMethod
+            'MiddleOfTheNight',
+            $iqamaRules,
+            null,
+            null         // no asrIqamaCalculationMethod
+        );
 
-        // Header should include the two optional columns at the end
-        $header = $result[0];
-        $this->assertCount(14, $header);
-        $this->assertEquals('asr_athan_standard', $header[12]);
-        $this->assertEquals('asr_athan_hanafi', $header[13]);
+        $builder = new Builder($location, $calculationMethod);
+        $result = $builder->buildAssociative('2023-01-15', '2023-01-15');
 
-        // Data row should contain valid times in those columns
-        $dataRow = $result[1];
-        $this->assertMatchesRegularExpression('/^\d{2}:\d{2}$/', $dataRow[12]);
-        $this->assertMatchesRegularExpression('/^\d{2}:\d{2}$/', $dataRow[13]);
+        $tz = new DateTimeZone('America/New_York');
+        $athan = DateTime::createFromFormat('Y-m-d H:i', '2023-01-15 ' . $result[0]['asr_athan'], $tz);
+        $expected = (clone $athan)->modify('+10 minutes')->format('H:i');
 
-        // Hanafi Asr is always at or after Standard Asr on the same day
-        $this->assertGreaterThanOrEqual($dataRow[12], $dataRow[13]);
+        $this->assertEquals($expected, $result[0]['asr_iqama']);
     }
 
     /**
-     * Test that buildAssociative exposes the optional Asr method keys when enabled
+     * Test that when asrIqamaCalculationMethod is specified, the Asr iqama
+     * afterAthanMinutes logic is based on that school's Asr athan time
      */
-    public function testBuildAssociativeWithAsrMethods()
+    public function testAsrIqamaUsesAsrIqamaCalculationMethod()
     {
         $location = $this->createTestLocation();
-        $calculationMethod = $this->createTestCalculationMethodDaily();
 
-        $builder = new Builder($location, $calculationMethod, 0, true);
+        $iqamaRules = new IqamaCalculationRules(
+            null,  // changeOn
+            null,  // fajr
+            null,  // dhuhr
+            new PrayerCalculationRule(null, 'daily', 1, null, null, 10, null, null),  // asr: +10 min after athan
+            null,  // maghrib
+            null   // isha
+        );
 
+        $calculationMethod = new CalculationMethod(
+            'MWL',
+            18.0,
+            17.0,
+            'Standard',  // asrCalculationMethod (drives the asr_athan column)
+            'MiddleOfTheNight',
+            $iqamaRules,
+            null,
+            'Hanafi'     // asrIqamaCalculationMethod (drives the asr iqama calculation)
+        );
+
+        $builder = new Builder($location, $calculationMethod);
         $result = $builder->buildAssociative('2023-01-15', '2023-01-15');
 
-        $this->assertArrayHasKey('asr_athan_standard', $result[0]);
-        $this->assertArrayHasKey('asr_athan_hanafi', $result[0]);
+        $tz = new DateTimeZone('America/New_York');
+        $date = new DateTime('2023-01-15', $tz);
+
+        // Compute the hanafi Asr athan time independently
+        $hanafiTimes = (new PrayerTimes('MWL', PrayerTimes::SCHOOL_HANAFI))->getTimes(
+            $date,
+            40.7128,
+            -74.0060,
+            0,
+            PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
+            null,
+            PrayerTimes::TIME_FORMAT_24H
+        );
+
+        $hanafiAthan = DateTime::createFromFormat('Y-m-d H:i', '2023-01-15 ' . $hanafiTimes[PrayerTimes::ASR], $tz);
+        $expected = (clone $hanafiAthan)->modify('+10 minutes')->format('H:i');
+
+        // The asr_athan column should use the standard school
+        $standardTimes = (new PrayerTimes('MWL', PrayerTimes::SCHOOL_STANDARD))->getTimes(
+            $date,
+            40.7128,
+            -74.0060,
+            0,
+            PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
+            null,
+            PrayerTimes::TIME_FORMAT_24H
+        );
+        $this->assertEquals($standardTimes[PrayerTimes::ASR], $result[0]['asr_athan']);
+
+        // The asr_iqama should be based on the hanafi athan time
+        $this->assertEquals($expected, $result[0]['asr_iqama']);
+        $this->assertNotEquals($result[0]['asr_athan'], $hanafiTimes[PrayerTimes::ASR]);
+    }
+
+    /**
+     * Test weekly Asr iqama with asrIqamaCalculationMethod: every day's iqama
+     * must be at least afterAthanMinutes after the hanafi Asr athan
+     */
+    public function testWeeklyAsrIqamaUsesAsrIqamaCalculationMethod()
+    {
+        $location = $this->createTestLocation();
+
+        $iqamaRules = new IqamaCalculationRules(
+            'Friday',  // changeOn
+            null,      // fajr
+            null,      // dhuhr
+            new PrayerCalculationRule(null, 'weekly', 5, null, null, 15, null, null),  // asr
+            null,      // maghrib
+            null       // isha
+        );
+
+        $calculationMethod = new CalculationMethod(
+            'MWL',
+            18.0,
+            17.0,
+            'Standard',
+            'MiddleOfTheNight',
+            $iqamaRules,
+            null,
+            'Hanafi'
+        );
+
+        $builder = new Builder($location, $calculationMethod);
+        $csvData = $builder->build('2023-01-13', '2023-01-19');
+
+        $tz = new DateTimeZone('America/New_York');
+        $hanafiCalculator = new PrayerTimes('MWL', PrayerTimes::SCHOOL_HANAFI);
+
+        foreach (array_slice($csvData, 1) as $row) {
+            $date = DateTime::createFromFormat('Y-m-d', $row[0], $tz);
+            $hanafiAthan = $hanafiCalculator->getTimes(
+                $date,
+                40.7128,
+                -74.0060,
+                0,
+                PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
+                null,
+                PrayerTimes::TIME_FORMAT_24H
+            )[PrayerTimes::ASR];
+
+            $athanTime = DateTime::createFromFormat('Y-m-d H:i', $row[0] . ' ' . $hanafiAthan, $tz);
+            $iqamaTime = DateTime::createFromFormat('Y-m-d H:i', $row[0] . ' ' . $row[7], $tz);
+
+            $diffMinutes = ($iqamaTime->getTimestamp() - $athanTime->getTimestamp()) / 60;
+
+            $this->assertGreaterThanOrEqual(
+                15,
+                $diffMinutes,
+                "On {$row[0]}, Asr iqama ({$row[7]}) is less than 15 min after the hanafi athan ($hanafiAthan)"
+            );
+        }
     }
 }

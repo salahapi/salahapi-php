@@ -25,9 +25,17 @@ class CalculationMethod
     public ?float $ishaAngle = null;
 
     /**
-     * @var string|null The method for calculating Asr prayer time.
+     * @var string|null The method for calculating Asr Athan time. When
+     *                  asrIqamaCalculationMethod is omitted, this method is
+     *                  also used to calculate the Asr Iqama time.
      */
     public ?string $asrCalculationMethod = null;
+
+    /**
+     * @var string|null The method for calculating Asr Iqama time. When omitted,
+     *                  asrCalculationMethod is used for both Asr Athan and Iqama.
+     */
+    public ?string $asrIqamaCalculationMethod = null;
 
     /**
      * @var string|null The adjustment method for high latitude locations.
@@ -50,10 +58,11 @@ class CalculationMethod
      * @param string $name Calculation method identifier
      * @param float|null $fajrAngle Fajr angle in degrees
      * @param float|null $ishaAngle Isha angle in degrees
-     * @param string|null $asrCalculationMethod Asr calculation method
+     * @param string|null $asrCalculationMethod Asr Athan calculation method
      * @param string|null $highLatitudeAdjustment High latitude adjustment method
      * @param IqamaCalculationRules|null $iqamaCalculationRules Iqama calculation rules
      * @param array<JumuahRule>|null $jumuahRules Jumuah rules
+     * @param string|null $asrIqamaCalculationMethod Asr Iqama calculation method (defaults to asrCalculationMethod)
      */
     public function __construct(
         string $name,
@@ -62,7 +71,8 @@ class CalculationMethod
         ?string $asrCalculationMethod = null,
         ?string $highLatitudeAdjustment = null,
         ?IqamaCalculationRules $iqamaCalculationRules = null,
-        ?array $jumuahRules = null
+        ?array $jumuahRules = null,
+        ?string $asrIqamaCalculationMethod = null
     ) {
         $this->name = $name;
         $this->fajrAngle = $fajrAngle;
@@ -71,6 +81,7 @@ class CalculationMethod
         $this->highLatitudeAdjustment = $highLatitudeAdjustment;
         $this->iqamaCalculationRules = $iqamaCalculationRules;
         $this->jumuahRules = $jumuahRules;
+        $this->asrIqamaCalculationMethod = $asrIqamaCalculationMethod;
     }
 
     /**
@@ -94,6 +105,10 @@ class CalculationMethod
         
         if ($this->asrCalculationMethod !== null) {
             $data['asrCalculationMethod'] = $this->asrCalculationMethod;
+        }
+
+        if ($this->asrIqamaCalculationMethod !== null) {
+            $data['asrIqamaCalculationMethod'] = $this->asrIqamaCalculationMethod;
         }
         
         if ($this->highLatitudeAdjustment !== null) {
@@ -140,7 +155,8 @@ class CalculationMethod
             $data['asrCalculationMethod'] ?? null,
             $data['highLatitudeAdjustment'] ?? null,
             $iqamaCalculationRules,
-            $jumuahRules
+            $jumuahRules,
+            $data['asrIqamaCalculationMethod'] ?? null
         );
     }
 
