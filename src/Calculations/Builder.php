@@ -18,14 +18,15 @@ use SalahAPI\PrayerCalculationRule;
  */
 class Builder
 {
+    /** Day-of-week names (lowercase) mapped to PHP's `w` day number. */
     private const DAY_OF_WEEK_MAP = [
-        'Sunday' => 0,
-        'Monday' => 1,
-        'Tuesday' => 2,
-        'Wednesday' => 3,
-        'Thursday' => 4,
-        'Friday' => 5,
-        'Saturday' => 6,
+        'sunday' => 0,
+        'monday' => 1,
+        'tuesday' => 2,
+        'wednesday' => 3,
+        'thursday' => 4,
+        'friday' => 5,
+        'saturday' => 6,
     ];
 
     private Location $location;
@@ -100,6 +101,8 @@ class Builder
     /**
      * Normalize high latitude adjustment method from config format to PrayerTimes constant
      * 
+     * Matching is case-insensitive.
+     * 
      * @param string|null $method Method from config
      * @return string Normalized method constant
      */
@@ -109,20 +112,20 @@ class Builder
             return PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN;
         }
         
-        // Map common config values to PrayerTimes constants
+        // Accept any casing and separator style (e.g. "middleOfTheNight",
+        // "MIDDLE_OF_THE_NIGHT", "middle-of-the-night") by comparing on
+        // lowercased alphanumeric characters only.
         $mapping = [
-            'MiddleOfTheNight' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
-            'MIDDLE_OF_THE_NIGHT' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
-            'NightMiddle' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
-            'AngleBased' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_ANGLE,
-            'ANGLE_BASED' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_ANGLE,
-            'OneSeventh' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_ONESEVENTH,
-            'ONE_SEVENTH' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_ONESEVENTH,
-            'None' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_NONE,
-            'NONE' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_NONE,
+            'middleofthenight' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
+            'nightmiddle' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN,
+            'anglebased' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_ANGLE,
+            'oneseventh' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_ONESEVENTH,
+            'none' => PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_NONE,
         ];
         
-        return $mapping[$method] ?? PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN;
+        $normalized = preg_replace('/[^a-z0-9]/', '', strtolower($method));
+        
+        return $mapping[$normalized] ?? PrayerTimes::LATITUDE_ADJUSTMENT_METHOD_MOTN;
     }
 
     /**
@@ -253,9 +256,9 @@ class Builder
         $processedDays = 0;
         $totalDays = count($allDaysData);
         
-        // Determine the day of week when iqama times change
+        // Determine the day of week when iqama times change (case-insensitive)
         $changeOnDay = $this->calculationMethod->iqamaCalculationRules?->changeOn ?? 'Friday';
-        $changeOnDayNumber = self::DAY_OF_WEEK_MAP[$changeOnDay] ?? 5;
+        $changeOnDayNumber = self::DAY_OF_WEEK_MAP[strtolower((string)$changeOnDay)] ?? 5;
         
         foreach ($allDaysData as $dayIndex => $dayData) {
             $currentDate = $dayData['date'];

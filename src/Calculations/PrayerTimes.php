@@ -178,7 +178,16 @@ class PrayerTimes
             Method::METHOD_SINGAPORE => 'Singapore'
         ];
         
-        $jsMethod = $methodMapping[$method] ?? 'MWL';
+        // Method name matching is case-insensitive; the canonical constant casing
+        // is stored so method-specific checks keep working.
+        $jsMethod = 'MWL';
+        foreach ($methodMapping as $methodKey => $candidate) {
+            if (strcasecmp((string)$method, $methodKey) === 0) {
+                $jsMethod = $candidate;
+                $method = $methodKey;
+                break;
+            }
+        }
         $this->method = $method;
         
         $this->settings = array_merge($this->settings, $this->methods['defaults']);
@@ -194,37 +203,48 @@ class PrayerTimes
     public function setSchool($school = self::SCHOOL_STANDARD)
     {
         $this->school = $school;
-        $this->settings['asr'] = ($school == self::SCHOOL_HANAFI) ? 'Hanafi' : 'Standard';
+        $this->settings['asr'] = (strcasecmp((string)$school, self::SCHOOL_HANAFI) === 0) ? 'Hanafi' : 'Standard';
     }
     
     /**
-     * Set midnight calculation mode
+     * Set midnight calculation mode (case-insensitive)
      */
     public function setMidnightMode($mode = self::MIDNIGHT_MODE_STANDARD)
     {
         $this->midnightMode = $mode;
-        $this->settings['midnight'] = ($mode == self::MIDNIGHT_MODE_JAFARI) ? 'Jafari' : 'Standard';
+        $this->settings['midnight'] = (strcasecmp((string)$mode, self::MIDNIGHT_MODE_JAFARI) === 0) ? 'Jafari' : 'Standard';
     }
     
     /**
-     * Set latitude adjustment method for high latitudes
+     * Set latitude adjustment method for high latitudes (case-insensitive)
      */
     public function setLatitudeAdjustmentMethod($method = self::LATITUDE_ADJUSTMENT_METHOD_ANGLE)
     {
         $this->latitudeAdjustmentMethod = $method;
         
-        $mapping = [
-            self::LATITUDE_ADJUSTMENT_METHOD_NONE => 'None',
-            self::LATITUDE_ADJUSTMENT_METHOD_MOTN => 'NightMiddle',
-            self::LATITUDE_ADJUSTMENT_METHOD_ONESEVENTH => 'OneSeventh',
-            self::LATITUDE_ADJUSTMENT_METHOD_ANGLE => 'AngleBased'
+        // Accept any casing and separator style (e.g. "middleOfTheNight",
+        // "MIDDLE_OF_THE_NIGHT", "middle-of-the-night") by comparing on
+        // lowercased alphanumeric characters only.
+        $aliases = [
+            'None' => ['none'],
+            'NightMiddle' => ['middleofthenight', 'nightmiddle'],
+            'OneSeventh' => ['oneseventh'],
+            'AngleBased' => ['anglebased'],
         ];
         
-        $this->settings['highLats'] = $mapping[$method] ?? 'AngleBased';
+        $normalized = preg_replace('/[^a-z0-9]/', '', strtolower((string)$method));
+        
+        $this->settings['highLats'] = 'AngleBased';
+        foreach ($aliases as $highLats => $names) {
+            if (in_array($normalized, $names, true)) {
+                $this->settings['highLats'] = $highLats;
+                break;
+            }
+        }
     }
     
     /**
-     * Set time format
+     * Set time format (case-insensitive)
      */
     public function setTimeFormat($format = self::TIME_FORMAT_24H)
     {
@@ -238,7 +258,14 @@ class PrayerTimes
             self::TIME_FORMAT_ISO8601 => 'iso8601'
         ];
         
-        $this->settings['format'] = $formatMapping[$format] ?? '24h';
+        $formatted = '24h';
+        foreach ($formatMapping as $formatKey => $value) {
+            if (strcasecmp((string)$format, $formatKey) === 0) {
+                $formatted = $value;
+                break;
+            }
+        }
+        $this->settings['format'] = $formatted;
     }
     
     /**

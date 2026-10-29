@@ -271,10 +271,11 @@ class IqamaCalculatorTest extends TestCase
 
         $results = IqamaCalculator::calculateIqama($days_data, 'fajr', $rule, 'sunrise');
         
-        // Weekly calculation across DST boundary: same wall clock iqama for all days,
-        // based on the latest candidate to guarantee afterAthanMinutes for all days.
-        // Latest athan is 06:32, roundUp(5)=06:35, +20=06:55 → all days get 06:55.
-        $this->assertEquals('06:55:00', $results[0]->format('H:i:s'));  // March 11 (no DST)
+        // Weekly calculation across DST boundary: candidates are compared in standard time
+        // and the winning time is applied per-day in that day's own DST regime. Latest
+        // standard-time candidate is 05:55 (06:55 EDT = 05:55 EST), so March 11 (EST) gets
+        // 05:55 while March 12-13 (EDT) get 06:55 - the same absolute instant.
+        $this->assertEquals('05:55:00', $results[0]->format('H:i:s'));  // March 11 (no DST)
         $this->assertEquals('06:55:00', $results[1]->format('H:i:s'));  // March 12 (DST)
         $this->assertEquals('06:55:00', $results[2]->format('H:i:s'));  // March 13 (DST)
     }
@@ -1136,9 +1137,9 @@ class IqamaCalculatorTest extends TestCase
      * Test edge case: DST transition day (Spring Forward)
      * March 8, 2026 at 2:00 AM clocks move to 3:00 AM in America/Los_Angeles
      * 
-     * Note: The DST override is based on whether the DATE is in DST, which PHP
-     * determines based on the specific time. Since we create dates at midnight (00:00),
-     * March 8 at midnight is still standard time (DST starts at 2 AM).
+     * Note: The DST override is resolved at the prayer's Athan time, since that is
+     * when the service takes place. The March 8 Athan (13:19) is already after the
+     * 2 AM spring-forward, so the DST override applies on the transition day itself.
      */
     public function testCalculateIqamaDuringSpringDSTTransition()
     {
@@ -1186,19 +1187,23 @@ class IqamaCalculatorTest extends TestCase
 
         $results = IqamaCalculator::calculateIqama($days_data, 'dhuhr', $baseRule);
         
-        // Verify DST detection works correctly
-        // March 7 is standard time, March 8 at midnight is still standard (DST starts at 2 AM)
-        // March 9 is DST
+        // Verify DST detection works correctly.
+        // DST overrides are resolved at the prayer's Athan time (the service happens then):
+        // March 7 Athan 12:20 is standard time, March 8 Athan 13:19 is already after the
+        // 2 AM spring-forward, March 9 is fully DST.
         $this->assertEquals('12:30:00', $results[0]->format('H:i:s'), 'Before DST should use 12:30');
-        $this->assertEquals('12:30:00', $results[1]->format('H:i:s'), 'DST day at midnight is still standard time');
+        $this->assertEquals('13:30:00', $results[1]->format('H:i:s'), 'DST day Athan (13:19) is after spring-forward, should use 13:30');
         $this->assertEquals('13:30:00', $results[2]->format('H:i:s'), 'Day after DST should use 13:30');
     }
 
     /**
      * Test edge case: Fall back DST transition (November 1, 2026)
      * 
-     * Note: DST ends at 2:00 AM on November 1. At midnight (00:00) on November 1,
-     * it's still DST. The clock falls back at 2:00 AM to 1:00 AM.
+     * Note: DST ends at 2:00 AM on November 1 (clocks fall back to 1:00 AM). The DST
+     * override is resolved at the prayer's Athan time, since that is when the service
+     * takes place. The November 1 Athan (11:52 AM) is already after the fall-back, so
+     * standard time applies on the transition day itself. This matches the production
+     * output in prayer_times_db_2026-10-29.csv (dhuhr iqama 12:30 PM on Nov 1).
      */
     public function testCalculateIqamaDuringFallDSTTransition()
     {
@@ -1246,10 +1251,13 @@ class IqamaCalculatorTest extends TestCase
 
         $results = IqamaCalculator::calculateIqama($days_data, 'dhuhr', $baseRule);
         
-        // Verify DST detection works correctly
-        // Oct 31 is still DST, Nov 1 at midnight is still DST (ends at 2 AM), Nov 2 is standard
+        // Verify DST detection works correctly.
+        // DST overrides are resolved at the prayer's Athan time (the service happens then):
+        // Oct 31 Athan 12:52 is DST, Nov 1 Athan 11:52 is already after the 2 AM fall-back,
+        // Nov 2 is standard. Matches production output (prayer_times_db_2026-10-29.csv):
+        // dhuhr iqama is 1:30 PM before the change and 12:30 PM from Nov 1 onward.
         $this->assertEquals('13:30:00', $results[0]->format('H:i:s'), 'Before fall back should use 13:30');
-        $this->assertEquals('13:30:00', $results[1]->format('H:i:s'), 'Nov 1 midnight is still DST');
+        $this->assertEquals('12:30:00', $results[1]->format('H:i:s'), 'Nov 1 Athan (11:52) is after fall-back, should use 12:30');
         $this->assertEquals('12:30:00', $results[2]->format('H:i:s'), 'Day after should use 12:30');
     }
 

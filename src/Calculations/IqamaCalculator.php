@@ -36,8 +36,12 @@ class IqamaCalculator
         if ($rule->static !== null) {
             foreach ($daysData as $dayIndex => $dayData) {
                 $dayDate = $dayData['date'];
-                // Resolve effective rule for this specific day (handles DST overrides per-day)
-                $effectiveRule = self::getEffectiveRule($rule, $dayDate);
+                // Resolve effective rule for this specific day (handles DST overrides per-day).
+                // DST is resolved at the prayer's Athan time (when available) since that is when
+                // the service takes place; a midnight date can still be in the previous DST
+                // regime on the day the clocks change.
+                $dstReference = $dayData['athan'][$prayerName] ?? null;
+                $effectiveRule = self::getEffectiveRule($rule, $dayDate, $dstReference);
                 $staticTime = TimeHelpers::parseTimeString($dayDate, $effectiveRule->static);
                 $results[$dayIndex] = $staticTime;
             }
@@ -72,7 +76,7 @@ class IqamaCalculator
         $results = [];
         
         // Partition days into those with and without overrides
-        [$daysWithOverrides, $daysWithoutOverrides] = self::partitionDaysByOverride($daysData, $rule);
+        [$daysWithOverrides, $daysWithoutOverrides] = self::partitionDaysByOverride($daysData, $rule, $prayerName);
         
         // Calculate iqama for days WITHOUT overrides using the base rule
         if (!empty($daysWithoutOverrides)) {
@@ -106,16 +110,18 @@ class IqamaCalculator
      * 
      * @param array $daysData Array of day data
      * @param PrayerCalculationRule $rule The base rule with overrides
+     * @param string $prayerName Name of the prayer, used to resolve DST overrides at the Athan time
      * @return array Array with two elements: [daysWithOverrides, daysWithoutOverrides]
      */
-    private static function partitionDaysByOverride(array $daysData, PrayerCalculationRule $rule): array
+    private static function partitionDaysByOverride(array $daysData, PrayerCalculationRule $rule, string $prayerName): array
     {
         $daysWithOverrides = [];
         $daysWithoutOverrides = [];
         
         foreach ($daysData as $dayIndex => $dayData) {
             $dayDate = $dayData['date'];
-            $effectiveRule = self::getEffectiveRule($rule, $dayDate);
+            $dstReference = $dayData['athan'][$prayerName] ?? null;
+            $effectiveRule = self::getEffectiveRule($rule, $dayDate, $dstReference);
             
             if ($effectiveRule !== $rule) {
                 // This day has an override
@@ -149,16 +155,18 @@ class IqamaCalculator
     ): array {
         $results = [];
         
-        // Determine if this is a weekly calculation
-        $isWeekly = ($rule->change === 'weekly');
+        // Determine if this is a weekly calculation (case-insensitive)
+        $isWeekly = (strcasecmp((string)$rule->change, 'weekly') === 0);
         
         // Extract rule parameters with defaults
         $params = self::getRuleParameters($rule);
         
         if ($isWeekly) {
-            // For weekly calculation, compute per-day candidate iqamas from original
-            // (non-normalized) wall clock times to avoid DST double-normalization issues.
-            // Then pick the candidate that guarantees the constraint holds for ALL days.
+            // For weekly calculation, compute per-day candidate iqamas and compare them as
+            // time-of-day in standard time (DST-normalized wall minutes). The winning time
+            // is applied to every day of the week in that day's own DST regime, so a week
+            // spanning a DST change renders as a different wall clock per side while still
+            // guaranteeing the constraint holds for ALL days.
             $bestCandidateMinutes = null;
             $isBeforeEnd = ($params['beforeEndMinutes'] > 0 && $endPrayerName !== null);
             
@@ -172,7 +180,7 @@ class IqamaCalculator
                     $dayEndTime = $dayData['athan'][$endPrayerName];
                     $candidate = TimeHelpers::roundDown(clone $dayEndTime, $params['roundMinutes']);
                     $candidate->modify("-{$params['beforeEndMinutes']} minutes");
-                    $candidateMinutes = (int)$candidate->format('G') * 60 + (int)$candidate->format('i');
+                    $candidateMinutes = TimeHelpers::timeToMinutes($candidate);
                     // For beforeEndMinutes, earliest candidate guarantees all days
                     if ($bestCandidateMinutes === null || $candidateMinutes < $bestCandidateMinutes) {
                         $bestCandidateMinutes = $candidateMinutes;
@@ -180,7 +188,7 @@ class IqamaCalculator
                 } else {
                     $candidate = TimeHelpers::roundUp(clone $dayAthan, $params['roundMinutes']);
                     $candidate->modify("+{$params['afterAthanMinutes']} minutes");
-                    $candidateMinutes = (int)$candidate->format('G') * 60 + (int)$candidate->format('i');
+                    $candidateMinutes = TimeHelpers::timeToMinutes($candidate);
                     // For afterAthanMinutes, latest candidate guarantees all days
                     if ($bestCandidateMinutes === null || $candidateMinutes > $bestCandidateMinutes) {
                         $bestCandidateMinutes = $candidateMinutes;
@@ -189,13 +197,20 @@ class IqamaCalculator
             }
             
             if ($bestCandidateMinutes !== null) {
+                if ($bestCandidateMinutes < 0) {
+                    $bestCandidateMinutes += 1440;
+                }
                 $bestHour = intdiv($bestCandidateMinutes, 60);
                 $bestMin = $bestCandidateMinutes % 60;
                 $bestTimeStr = sprintf('%02d:%02d', $bestHour, $bestMin);
                 
                 foreach ($daysData as $dayIndex => $dayData) {
                     $dayDate = $dayData['date'];
-                    $dayIqama = TimeHelpers::parseTimeString($dayDate, $bestTimeStr);
+                    // Re-anchor the standard time on this day, then shift back to the
+                    // day's own DST regime (adds one hour when the time is in DST).
+                    $dayIqama = TimeHelpers::denormalizeTimeForDst(
+                        TimeHelpers::parseTimeString($dayDate, $bestTimeStr)
+                    );
                     
                     // Apply min/max constraints
                     $minTime = TimeHelpers::parseTimeString($dayDate, $params['earliestTime']);
@@ -286,24 +301,36 @@ class IqamaCalculator
      * Resolves overrides based on conditions (e.g., daylight savings time, ramadan)
      * and returns the appropriate rule to use.
      * 
+     * The daylightSavingsTime condition is evaluated against $dstReferenceTime (the
+     * prayer's Athan time when available) rather than the date at midnight, because
+     * on the day the clocks change the midnight date still belongs to the previous
+     * DST regime while the actual prayer service does not.
+     * 
      * @param PrayerCalculationRule|null $baseRule The base rule with potential overrides
      * @param DateTime $date The date to check for override conditions
+     * @param DateTime|null $dstReferenceTime Reference instant for the daylightSavingsTime condition (e.g., the Athan time)
      * @return PrayerCalculationRule|null The effective rule (override or base)
      */
-    private static function getEffectiveRule(?PrayerCalculationRule $baseRule, DateTime $date): ?PrayerCalculationRule
-    {
+    private static function getEffectiveRule(
+        ?PrayerCalculationRule $baseRule,
+        DateTime $date,
+        ?DateTime $dstReferenceTime = null
+    ): ?PrayerCalculationRule {
         if ($baseRule === null || $baseRule->overrides === null || empty($baseRule->overrides)) {
             return $baseRule;
         }
         
-        $isDst = self::isDaylightSavingsTime($date);
+        $isDst = self::isDaylightSavingsTime($dstReferenceTime ?? $date);
         $isRamadan = HijriDateConverter::isRamadan($date);
         
         foreach ($baseRule->overrides as $override) {
-            if ($override->condition === 'daylightSavingsTime' && $isDst) {
+            // Condition matching is case-insensitive
+            $condition = strtolower((string)$override->condition);
+            
+            if ($condition === 'daylightsavingstime' && $isDst) {
                 return $override->time;
             }
-            if ($override->condition === 'ramadan' && $isRamadan) {
+            if ($condition === 'ramadan' && $isRamadan) {
                 return $override->time;
             }
             // Future: Add more conditions as needed (dateRange, etc.)
